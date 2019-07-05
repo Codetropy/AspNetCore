@@ -7,7 +7,6 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.AspNetCore.Components.Rendering;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.AspNetCore.SignalR.Protocol;
 using Microsoft.Extensions.DependencyInjection;
@@ -52,7 +51,7 @@ namespace Ignitor
             return elementNode.ClickAsync(HubConnection);
         }
 
-        public ElementHive Hive { get; set; }
+        public ElementHive Hive { get; set; } = new ElementHive();
 
         public async Task<bool> ConnectAsync(Uri uri, bool prerendered)
         {
@@ -60,7 +59,6 @@ namespace Ignitor
             builder.Services.TryAddEnumerable(ServiceDescriptor.Singleton<IHubProtocol, IgnitorMessagePackHubProtocol>());
             builder.WithUrl(new Uri(uri, "_blazor/"));
             builder.ConfigureLogging(l => l.AddConsole().SetMinimumLevel(LogLevel.Trace));
-            var hive = new ElementHive();
 
             HubConnection = builder.Build();
             await HubConnection.StartAsync(CancellationToken);
@@ -91,14 +89,15 @@ namespace Ignitor
             void OnRenderBatch(int browserRendererId, int batchId, byte[] batchData)
             {
                 var batch = RenderBatchReader.Read(batchData);
-                hive.Update(batch);
+                RenderBatchReceived?.Invoke(browserRendererId, batchId, batchData);
+
+                Hive.Update(batch);
 
                 if (ConfirmRenderBatch)
                 {
                     HubConnection.InvokeAsync("OnRenderCompleted", batchId, /* error */ null);
                 }
 
-                RenderBatchReceived?.Invoke(browserRendererId, batchId, batchData);
             }
 
             void OnError(Error error)
@@ -121,7 +120,7 @@ namespace Ignitor
             }
         }
 
-        void InvokeDotNetMethod(object callId, string assemblyName, string methodIdentifier, object dotNetObjectId, string argsJson)
+        public void InvokeDotNetMethod(object callId, string assemblyName, string methodIdentifier, object dotNetObjectId, string argsJson)
         {
             HubConnection.InvokeAsync("BeginInvokeDotNetFromJS", callId?.ToString(), assemblyName, methodIdentifier, dotNetObjectId ?? 0, argsJson);
         }
